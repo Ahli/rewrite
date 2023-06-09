@@ -11,6 +11,7 @@ import org.openrewrite.java.tree.Statement;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Value
@@ -50,47 +51,53 @@ public class UseOptionalOrElse extends Recipe {
                     }
                     String variableName = result.get();
 
+                    boolean thenPartMatches = checkThenPart(variableName, ifStatement);
 
-
-
-                    
-                    Statement thenPart = ifStatement.getThenPart();
-
-                    if(!(thenPart instanceof J.Block)) {
-                        return statement;
-                    }
-                    J.Block thenBlock = (J.Block) thenPart;
-                    List<Statement> thenStatements = thenBlock.getStatements();
-                    if(thenStatements.size() != 1) {
-                        return statement;
-                    }
-                    Statement thenStatement = thenStatements.get(0);
-                    if(thenStatement instanceof J.Return) {
-                        J.Return thenReturn = (J.Return) thenStatement;
-                        Expression thenReturnExpression = thenReturn.getExpression();
-                        if(!(thenReturnExpression instanceof J.MethodInvocation)) {
-                            return statement;
-                        }
-                        J.MethodInvocation thenReturnMethodInvocation = (J.MethodInvocation) thenReturnExpression;
-                        Expression select = thenReturnMethodInvocation.getSelect();
-                        if(!(select instanceof J.Identifier)
-                                || !((J.Identifier) select).getSimpleName().equals(variableName.get())) {
-                            return statement;
-                        }
-
-
-
-
-
-
-                        int j = 0;
-
-                    } else {
+                    if (!thenPartMatches) {
                         return statement;
                     }
 
 
-                    int i = 0;
+
+                    J.If.Else elsePart = ifStatement.getElsePart();
+
+                    J.Block elseBody = (J.Block) elsePart.getBody();
+
+                    if(elseBody.getStatements().size() != 1) {
+                        return statement;
+                    }
+
+                    if (!(elseBody.getStatements().get(0) instanceof J.Return)) {
+                        return statement;
+                    }
+
+
+
+
+                    J.Return returnStatement = (J.Return) elseBody.getStatements().get(0);
+                    J.Literal returnExpression = (J.Literal)returnStatement.getExpression();
+
+
+
+                    JavaTemplate javaTemplate = JavaTemplate.builder(variableName + ".orElse(" + returnExpression.getValue() + ")").build();
+
+
+
+                    //
+//  \-------J.Return | "return status.orElse("UNKNOWN")"
+//  \---J.MethodInvocation | "status.orElse("UNKNOWN")"
+//  |-------J.Identifier | "status"
+//  |---J.Identifier | "orElse"
+//  \-----------J.Literal | ""UNKNOWN""
+
+
+
+
+
+
+
+
+             //       int i = 0;
                 }
 
 
@@ -108,14 +115,11 @@ public class UseOptionalOrElse extends Recipe {
                 return Optional.empty();
             }
             J.MethodInvocation methodInvocation = (J.MethodInvocation) conditionExpression;
-            J.Identifier methodInvocationName = methodInvocation.getName();
 
-            if(!methodInvocation.getSimpleName().equals("isPresent")){
+            if (!matchesFunctionName(methodInvocation, "isPresent")) {
                 return Optional.empty();
             }
-            if(methodInvocation.getArguments().size() != 1
-                    || !(methodInvocation.getArguments().get(0) instanceof J.Empty)
-            ){
+            if(!isCalledWithoutArguments(methodInvocation)) {
                 return Optional.empty();
             }
             Expression select = methodInvocation.getSelect().unwrap();
@@ -127,5 +131,46 @@ public class UseOptionalOrElse extends Recipe {
             return Optional.of(variableName);
         }
 
+        private boolean matchesFunctionName(J.MethodInvocation methodInvocation, String functionName) {
+            return methodInvocation.getSimpleName().equals(functionName);
+        }
+
+        private boolean isCalledWithoutArguments(J.MethodInvocation methodInvocation) {
+            return methodInvocation.getArguments().size() == 1  && (methodInvocation.getArguments().get(0) instanceof J.Empty);
+        }
+
+
+        boolean checkThenPart(String variableName, J.If ifStatement) {
+
+            J.Block thenBlock = (J.Block) ifStatement.getThenPart();
+            List<Statement> thenStatements = thenBlock.getStatements();
+            if(thenStatements.size() != 1) {
+                return false;
+            }
+            Statement thenStatement = thenStatements.get(0);
+
+            if(!(thenStatement instanceof J.Return)) {
+                return false;
+            }
+
+
+            J.Return thenReturn = (J.Return) thenStatement;
+            Expression thenReturnExpression = thenReturn.getExpression();
+            if(!(thenReturnExpression instanceof J.MethodInvocation)) {
+                return false;
+            }
+            J.MethodInvocation thenReturnMethodInvocation = (J.MethodInvocation) thenReturnExpression;
+            Expression select = thenReturnMethodInvocation.getSelect();
+            if(!(select instanceof J.Identifier)
+                    || !((J.Identifier) select).getSimpleName().equals(variableName)) {
+                return false;
+            }
+
+            if (!matchesFunctionName(thenReturnMethodInvocation, "get")) {
+                return false;
+            }
+
+            return isCalledWithoutArguments(thenReturnMethodInvocation);
+        }
     }
 }

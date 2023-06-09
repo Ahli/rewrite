@@ -50,6 +50,7 @@ public class UseOptionalOrElseTest
         );
     }
 
+
     @Test
     void replacesWithAssignment()
     {
@@ -189,4 +190,6 @@ public class UseOptionalOrElseTest
           )
         );
     }
+
+    // TODO if else without curly braces, tenary operator
 }
