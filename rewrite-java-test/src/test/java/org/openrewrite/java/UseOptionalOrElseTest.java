@@ -24,39 +24,88 @@ import static org.openrewrite.java.Assertions.java;
 public class UseOptionalOrElseTest
   implements RewriteTest {
     @Test
-    void replacesWithReturn() {
+    void replacesWithReturnLiteral() {
         rewriteRun(
           recipeSpec -> recipeSpec.recipe(new UseOptionalOrElse()),
           java(
             """
               package my.test;
-
+              
               class A
               {
                   public String findUserStatus() {
-
+                  
                       Optional<String> status = Optional.empty();
-
+                      
                       if (status.isPresent()) {
                           return status.get();
                       } else {
                           return "UNKNOWN";
                       }
-
+                      
                   }
               }
               """,
             """
               package my.test;
-
+              
               class A
               {
                   public String findUserStatus() {
-
+                  
                       Optional<String> status = Optional.empty();
-
+                      
                       return status.orElse("UNKNOWN");
+                      
+                  }
+              }
+              """
+          )
+        );
+    }
 
+    @Test
+    void replacesWithReturnMethod() {
+        rewriteRun(
+          recipeSpec -> recipeSpec.recipe(new UseOptionalOrElse()),
+          java(
+            """
+              package my.test;
+              
+              class A
+              {
+                  public String findUserStatus() {
+                  
+                      Optional<String> status = Optional.empty();
+                      
+                      if (status.isPresent()) {
+                          return status.get();
+                      } else {
+                          return fallback();
+                      }
+                      
+                  }
+                  
+                  private String fallback(){
+                    return "fallback";
+                  }
+              }
+              """,
+            """
+              package my.test;
+              
+              class A
+              {
+                  public String findUserStatus() {
+                  
+                      Optional<String> status = Optional.empty();
+                      
+                      return status.orElse(fallback());
+                      
+                  }
+                  
+                  private String fallback(){
+                    return "fallback";
                   }
               }
               """

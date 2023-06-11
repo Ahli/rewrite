@@ -88,7 +88,7 @@ public class UseOptionalOrElse extends Recipe {
                 }
 
                 J.Return returnStatement = (J.Return) elseBody.getStatements().get(0);
-                J.Literal returnExpression = (J.Literal) returnStatement.getExpression();
+                Expression returnExpression = returnStatement.getExpression();
 
                 JavaTemplate javaTemplate = JavaTemplate.builder(
                                 "return #{any(java.util.Optional)}.orElse(#{any(java.lang.Object)});")
