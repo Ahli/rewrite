@@ -10,7 +10,6 @@ import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.JavaType;
 import org.openrewrite.java.tree.Statement;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,72 +38,64 @@ public class UseOptionalOrElse extends Recipe {
         @Override
         public J.Block visitBlock(J.Block block, ExecutionContext executionContext) {
 
-            List<Statement> statements = block.getStatements();
-            List<Statement> newStatements = new ArrayList<>(statements.size());
+            J.Block newBlock = null;
 
+            List<Statement> statements = block.getStatements();
             for (int i = 0; i < statements.size(); i++) {
                 Statement statement = statements.get(i);
-                newStatements.add(statement);
 
-                if (statement instanceof J.If) {
-
-                    J.If ifStatement = (J.If) statement;
-
-                    Optional<J.Identifier> result = checkCondition(ifStatement);
-                    if (!result.isPresent()) {
-                        continue;
-                    }
-                    String variableName = result.get().getSimpleName();
-                    J.Identifier variableIdentifier = result.get();
-
-                    boolean thenPartMatches = checkThenPart(variableName, ifStatement);
-
-                    if (!thenPartMatches) {
-                        continue;
-                    }
-
-
-                    J.If.Else elsePart = ifStatement.getElsePart();
-
-                    J.Block elseBody = (J.Block) elsePart.getBody();
-
-                    if (elseBody.getStatements().size() != 1) {
-                        continue;
-                    }
-
-                    if (!(elseBody.getStatements().get(0) instanceof J.Return)) {
-                        continue;
-                    }
-
-
-                    J.Return returnStatement = (J.Return) elseBody.getStatements().get(0);
-                    J.Literal returnExpression = (J.Literal) returnStatement.getExpression();
-
-
-                    JavaTemplate javaTemplate = JavaTemplate.builder(
-                                    "return #{any(java.util.Optional)}.orElse(#{any(java.lang.Object)});")
-                            .contextSensitive()
-                            .imports(Optional.class.getName())
-                            .build();
-
-
-                    J.Block newJBlock = javaTemplate.apply(
-                            getCursor(),
-                            ifStatement.getCoordinates().replace(),
-                            variableIdentifier.withType(JavaType.buildType("java.util.Optional")),
-                            returnExpression
-                    );
-                    Statement newStatement = newJBlock.getStatements().get(i);
-
-                    newStatements.remove(i);
-//                    newStatements.clear(); // DEBUG
-                    newStatements.add(newStatement);
-
-                    int j = 0;
+                if (!(statement instanceof J.If)) {
+                    continue;
                 }
+
+                J.If ifStatement = (J.If) statement;
+
+                Optional<J.Identifier> result = checkCondition(ifStatement);
+                if (!result.isPresent()) {
+                    continue;
+                }
+                String variableName = result.get().getSimpleName();
+                J.Identifier variableIdentifier = result.get();
+
+                boolean thenPartMatches = checkThenPart(variableName, ifStatement);
+
+                if (!thenPartMatches) {
+                    continue;
+                }
+
+                J.If.Else elsePart = ifStatement.getElsePart();
+
+                J.Block elseBody = (J.Block) elsePart.getBody();
+
+                if (elseBody.getStatements().size() != 1) {
+                    continue;
+                }
+
+                if (!(elseBody.getStatements().get(0) instanceof J.Return)) {
+                    continue;
+                }
+
+                J.Return returnStatement = (J.Return) elseBody.getStatements().get(0);
+                J.Literal returnExpression = (J.Literal) returnStatement.getExpression();
+
+                JavaTemplate javaTemplate = JavaTemplate.builder(
+                                "return #{any(java.util.Optional)}.orElse(#{any(java.lang.Object)});")
+                        .contextSensitive()
+                        .imports(Optional.class.getName())
+                        .build();
+
+                newBlock = javaTemplate.apply(
+                        getCursor(),
+                        ifStatement.getCoordinates().replace(),
+                        variableIdentifier.withType(JavaType.buildType("java.util.Optional")),
+                        returnExpression
+                );
             }
 
-            return super.visitBlock(block.withStatements(newStatements), executionContext);
+            if (newBlock == null) {
+                return super.visitBlock(block, executionContext);
+            }
+            return super.visitBlock(block.withStatements(newBlock.getStatements()), executionContext);
         }
 
         private Optional<J.Identifier> checkCondition(J.If ifStatement) {
