@@ -5,13 +5,11 @@ import lombok.Value;
 import org.openrewrite.ExecutionContext;
 import org.openrewrite.Recipe;
 import org.openrewrite.TreeVisitor;
-import org.openrewrite.java.tree.Expression;
-import org.openrewrite.java.tree.J;
-import org.openrewrite.java.tree.Statement;
+import org.openrewrite.internal.lang.Nullable;
+import org.openrewrite.java.tree.*;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Value
@@ -39,22 +37,24 @@ public class UseOptionalOrElse extends Recipe {
         @Override
         public J.Block visitBlock(J.Block block, ExecutionContext executionContext) {
 
-            List<Statement> statements = block.getStatements().stream().map(statement -> {
+            J.Block newBlock = block;
 
+
+            for (Statement statement : block.getStatements()) {
                 if(statement instanceof J.If) {
 
                     J.If ifStatement = (J.If) statement;
 
                     Optional<String> result = checkCondition(ifStatement);
                     if(!result.isPresent()){
-                        return statement;
+                        continue;
                     }
                     String variableName = result.get();
 
                     boolean thenPartMatches = checkThenPart(variableName, ifStatement);
 
                     if (!thenPartMatches) {
-                        return statement;
+                        continue;
                     }
 
 
@@ -64,48 +64,34 @@ public class UseOptionalOrElse extends Recipe {
                     J.Block elseBody = (J.Block) elsePart.getBody();
 
                     if(elseBody.getStatements().size() != 1) {
-                        return statement;
+                        continue;
                     }
 
                     if (!(elseBody.getStatements().get(0) instanceof J.Return)) {
-                        return statement;
+                        continue;
                     }
-
-
-
 
                     J.Return returnStatement = (J.Return) elseBody.getStatements().get(0);
                     J.Literal returnExpression = (J.Literal)returnStatement.getExpression();
 
+                    newBlock = JavaTemplate.builder("return " + variableName + ".orElse( " + returnExpression.getValueSource() + " );")
+                            .contextSensitive()
 
-
-                    JavaTemplate javaTemplate = JavaTemplate.builder(variableName + ".orElse(" + returnExpression.getValue() + ")").build();
-
-
-
-                    //
-//  \-------J.Return | "return status.orElse("UNKNOWN")"
-//  \---J.MethodInvocation | "status.orElse("UNKNOWN")"
-//  |-------J.Identifier | "status"
-//  |---J.Identifier | "orElse"
-//  \-----------J.Literal | ""UNKNOWN""
+                            .build()
+                            .apply(
+                                    getCursor(),
+                                    statement.getCoordinates().replace()
+                            );
 
 
 
-
-
-
-
-
-             //       int i = 0;
                 }
 
+            }
+            return super.visitBlock(block.withStatements(newBlock.getStatements()), executionContext);
 
-                return statement;
-            }).collect(Collectors.toList());
-
-            return super.visitBlock(block.withStatements(statements), executionContext);
         }
+
 
         private Optional<String> checkCondition(J.If ifStatement) {
             J.ControlParentheses<Expression> ifCondition = ifStatement.getIfCondition();
@@ -172,5 +158,30 @@ public class UseOptionalOrElse extends Recipe {
 
             return isCalledWithoutArguments(thenReturnMethodInvocation);
         }
+
+
     }
+
+    @Nullable
+    private static String maybeQuoteStringArgument(@Nullable String attributeName, @Nullable String attributeValue, J.Annotation annotation) {
+        if ((attributeValue != null) && attributeIsString(attributeName, annotation)) {
+            return "\"" + attributeValue + "\"";
+        } else {
+            return attributeValue;
+        }
+    }
+
+    private static boolean attributeIsString(@Nullable String attributeName, J.Annotation annotation) {
+        String actualAttributeName = (attributeName == null) ? "value" : attributeName;
+        JavaType.Class annotationType = (JavaType.Class) annotation.getType();
+        if (annotationType != null) {
+            for (JavaType.Method m : annotationType.getMethods()) {
+                if (m.getName().equals(actualAttributeName)) {
+                    return TypeUtils.isOfClassType(m.getReturnType(), "java.lang.String");
+                }
+            }
+        }
+        return false;
+    }
+
 }
