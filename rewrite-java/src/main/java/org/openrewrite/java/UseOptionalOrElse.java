@@ -48,18 +48,14 @@ public class UseOptionalOrElse extends Recipe {
         return new UseOptionOrElseVisitor();
     }
 
-    private class UseOptionOrElseVisitor
-            extends JavaIsoVisitor<ExecutionContext> {
+    private class UseOptionOrElseVisitor extends JavaIsoVisitor<ExecutionContext> {
 
         @Override
         public J.Block visitBlock(J.Block block, ExecutionContext executionContext) {
 
             J.Block newBlock = null;
 
-            List<Statement> statements = block.getStatements();
-            for (int i = 0; i < statements.size(); i++) {
-                Statement statement = statements.get(i);
-
+            for (Statement statement : block.getStatements()) {
                 if (!(statement instanceof J.If)) {
                     continue;
                 }
